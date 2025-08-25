@@ -9,21 +9,12 @@ from app.IAM.models import User, Role, RefreshToken
 from app.IAM.services import create_user, authenticate_user, issue_tokens, rotate_refresh, revoke_all_refresh_for_user, assign_role
 from jose import JWTError
 from app.core.security import decode_refresh
+import json as _json
+from uuid import uuid4
 
 router = APIRouter()
 
 # ---------- Auth ----------
-@router.post("/auth/register", response_model=S.UserOut)
-def register(body: S.RegisterIn, session: Session = Depends(get_session)):
-    try:
-        user = create_user(session, body.username, body.email, body.password)
-        # Optionally assign default role
-        assign_role(session, user, "Viewer")
-        return S.UserOut(id=user.id, username=user.username, email=user.email, roles=[r.name for r in user.roles], status=user.status)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
 @router.post("/auth/login", response_model=S.TokenOut)
 def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = authenticate_user(session, form.username, form.password)
@@ -35,13 +26,15 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
 
 @router.post("/auth/refresh", response_model=S.TokenOut)
 def refresh_token(token: str, session: Session = Depends(get_session)):
-    # Client sends refresh token in body as 'token'
     try:
         payload = decode_refresh(token)
         if payload.get("type") != "refresh":
             raise HTTPException(401, "Invalid token type")
-        user_id = int(payload.get("sub"))
+        sub = payload.get("sub")
         jti = payload.get("jti")
+        if sub is None or jti is None:
+            raise HTTPException(401, "Invalid token payload")
+        user_id = int(sub)
     except JWTError:
         raise HTTPException(401, "Invalid or expired refresh token")
     try:
@@ -49,6 +42,18 @@ def refresh_token(token: str, session: Session = Depends(get_session)):
     except ValueError as e:
         raise HTTPException(401, str(e))
     return S.TokenOut(access_token=access, refresh_token=new_refresh, expires_in=1800)
+
+
+@router.post("/auth/register", response_model=S.UserOut)
+def register(body: S.RegisterIn, session: Session = Depends(get_session)):
+    try:
+        user = create_user(session, body.username, body.email, body.password)
+        assign_role(session, user, "Viewer")
+        if user.id is None:
+            raise HTTPException(500, "User ID is None")
+        return S.UserOut(id=user.id, username=user.username, email=user.email, roles=[r.name for r in user.roles], status=user.status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/auth/logout")
@@ -59,102 +64,20 @@ def logout(user=Depends(get_current_user), session: Session = Depends(get_sessio
     return {"message": "Logged out successfully", "revoked_refresh_tokens": count}
 
 # ---------- Users (Admin only) ----------
-@router.get("/users", dependencies=[Depends(require_roles("Admin"))])
-def list_users(session: Session = Depends(get_session)):
-    users = session.exec(select(User)).all()
-    out = []
-    for u in users:
-        out.append({"id": u.id, "username": u.username, "email": u.email, "roles": [r.name for r in u.roles], "status": u.status})
-    return out
+ 
 
 
-@router.get("/users/{user_id}", dependencies=[Depends(require_roles("Admin"))])
-def get_user(user_id: int, session: Session = Depends(get_session)):
-    u = session.get(User, user_id)
-    if not u:
-        raise HTTPException(404, "User not found")
-    return {"id": u.id, "username": u.username, "email": u.email, "roles": [r.name for r in u.roles], "status": u.status}
-
-
-@router.put("/users/{user_id}", dependencies=[Depends(require_roles("Admin"))])
-def update_user(user_id: int, body: S.UserUpdateIn, session: Session = Depends(get_session)):
-    u = session.get(User, user_id)
-    if not u:
-        raise HTTPException(404, "User not found")
-    if body.email is not None:
-        u.email = body.email
-    if body.status is not None:
-        u.status = body.status
-    session.add(u); session.commit(); session.refresh(u)
-    return {"id": u.id, "username": u.username, "email": u.email, "status": u.status}
-
-
-@router.delete("/users/{user_id}", dependencies=[Depends(require_roles("Admin"))])
-def delete_user(user_id: int, session: Session = Depends(get_session)):
-    u = session.get(User, user_id)
-    if not u:
-        raise HTTPException(404, "User not found")
-    session.delete(u); session.commit()
-    return {"message": "User deleted successfully"}
-
-# ---------- Roles ----------
-@router.post("/roles", dependencies=[Depends(require_roles("Admin"))])
-def create_role(body: S.RoleCreate, session: Session = Depends(get_session)):
-    if session.exec(select(Role).where(Role.name == body.name)).first():
-        raise HTTPException(400, "Role already exists")
-    role = Role(name=body.name, description=body.description)
-    session.add(role); session.commit(); session.refresh(role)
-    return role
-
-
-@router.get("/roles", dependencies=[Depends(require_roles("Admin"))])
-def list_roles(session: Session = Depends(get_session)):
-    return session.exec(select(Role)).all()
-
-
-@router.post("/users/{user_id}/roles/{role_name}", dependencies=[Depends(require_roles("Admin"))])
+ 
+from app.IAM.models import Permission, Application
 def add_role_to_user(user_id: int, role_name: str, session: Session = Depends(get_session)):
     u = session.get(User, user_id)
     if not u:
         raise HTTPException(404, "User not found")
     u = assign_role(session, u, role_name)
     return {"id": u.id, "roles": [r.name for r in u.roles]}
-from uuid import uuid4
-import json as _json
-from app.IAM.models import Permission, Application
 
 # ---------- Users ----------
-@router.get("/users", dependencies=[Depends(require_roles("Admin"))], response_model=list[S.UserOut])
-def list_users(session: Session = Depends(get_session)):
-    users = session.exec(select(User)).all()
-    return [S.UserOut(id=u.id, username=u.username, email=u.email, roles=[r.name for r in u.roles], status=u.status) for u in users]
-
-@router.get("/users/{user_id}", dependencies=[Depends(require_roles("Admin"))], response_model=S.UserOut)
-def get_user(user_id: int, session: Session = Depends(get_session)):
-    u = session.get(User, user_id)
-    if not u:
-        raise HTTPException(404, "User not found")
-    return S.UserOut(id=u.id, username=u.username, email=u.email, roles=[r.name for r in u.roles], status=u.status)
-
-@router.put("/users/{user_id}", dependencies=[Depends(require_roles("Admin"))])
-def update_user(user_id: int, body: S.UserUpdateIn, session: Session = Depends(get_session)):
-    u = session.get(User, user_id)
-    if not u:
-        raise HTTPException(404, "User not found")
-    if body.email is not None:
-        u.email = body.email
-    if body.status is not None:
-        u.status = body.status
-    session.add(u); session.commit(); session.refresh(u)
-    return {"id": u.id, "username": u.username, "email": u.email, "status": u.status}
-
-@router.delete("/users/{user_id}", dependencies=[Depends(require_roles("Admin"))])
-def delete_user(user_id: int, session: Session = Depends(get_session)):
-    u = session.get(User, user_id)
-    if not u:
-        raise HTTPException(404, "User not found")
-    session.delete(u); session.commit()
-    return {"message": "User deleted successfully"}
+ 
 
 # ---------- Permissions ----------
 @router.post("/permissions", dependencies=[Depends(require_roles("Admin"))])
@@ -187,6 +110,8 @@ def register_application(body: S.ApplicationCreate, session: Session = Depends(g
         status="Active"
     )
     session.add(rec); session.commit(); session.refresh(rec)
+    if rec.id is None:
+        raise HTTPException(500, "Application ID is None")
     return S.ApplicationOut(
         id=rec.id, name=rec.name, client_id=rec.client_id, client_secret=rec.client_secret,
         redirect_uris=_json.loads(rec.redirect_uris), scopes=_json.loads(rec.scopes),
@@ -207,7 +132,7 @@ def list_applications(session: Session = Depends(get_session)):
 @router.get("/applications/{app_id}", dependencies=[Depends(require_roles("Admin"))], response_model=S.ApplicationOut)
 def get_application(app_id: int, session: Session = Depends(get_session)):
     r = session.get(Application, app_id)
-    if not r:
+    if not r or r.id is None:
         raise HTTPException(404, "Application not found")
     return S.ApplicationOut(
         id=r.id, name=r.name, client_id=r.client_id, client_secret=r.client_secret,
@@ -218,7 +143,7 @@ def get_application(app_id: int, session: Session = Depends(get_session)):
 @router.put("/applications/{app_id}", dependencies=[Depends(require_roles("Admin"))], response_model=S.ApplicationOut)
 def update_application(app_id: int, body: S.ApplicationUpdate, session: Session = Depends(get_session)):
     r = session.get(Application, app_id)
-    if not r:
+    if not r or r.id is None:
         raise HTTPException(404, "Application not found")
     if body.name is not None: r.name = body.name
     if body.redirect_uris is not None: r.redirect_uris = _json.dumps(body.redirect_uris)

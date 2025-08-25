@@ -1,9 +1,11 @@
 from __future__ import annotations
+from dotenv import load_dotenv
 from contextlib import contextmanager
 from typing import Generator
 from sqlmodel import SQLModel, create_engine, Session
 import os
 
+load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
