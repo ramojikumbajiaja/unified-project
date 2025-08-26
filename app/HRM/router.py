@@ -6,6 +6,7 @@ from app.core.database import engine
 from app.core.security import require_roles
 from app.HRM.models import Employee, Department, Attendance, LeaveApplication, Payroll
 from pydantic import BaseModel
+from datetime import datetime
 
 router = APIRouter(prefix="/hrm", tags=["HRM"])
 
@@ -21,7 +22,9 @@ class EmployeeIn(BaseModel):
 class PayrollIn(BaseModel):
     emp_id: int
     month: str  # YYYY-MM
-    net_salary: float
+    basic: float = 0.0
+    allowances: float = 0.0
+    deductions: float = 0.0
 
 class LeaveIn(BaseModel):
     emp_id: int
@@ -108,29 +111,37 @@ def delete_department(dept_id: int):
         return {"message": "Department deleted"}
 
 # ---------- Attendance ----------
-@router.post("/attendance/{emp_id}", dependencies=hrm_deps)
-def check_attendance(emp_id: int, body: AttendanceIn):
-    with Session(engine) as s:
-        if not s.get(Employee, emp_id):
-            raise HTTPException(404, "Employee not found")
-        att = Attendance(emp_id=emp_id, action=body.action)
-        s.add(att); s.commit(); s.refresh(att)
-        return att
+# @router.post("/attendance/{emp_id}", dependencies=hrm_deps)
+# def check_attendance(emp_id: int, body: AttendanceIn):
+#     with Session(engine) as s:
+#         if not s.get(Employee, emp_id):
+#             raise HTTPException(404, "Employee not found")
+#         att = Attendance(employee_id=emp_id, action=body.action)
+#         s.add(att); s.commit(); s.refresh(att)
+#         return att
 
-@router.get("/attendance/{emp_id}", dependencies=hrm_deps)
-def get_attendance(emp_id: int, month: Optional[str] = Query(None, description="YYYY-MM")):
-    with Session(engine) as s:
-        q = select(Attendance).where(Attendance.emp_id == emp_id)
-        if month:
-            # store Attendance.at as ISO datetime; filter by startswith month
-            q = q.where(Attendance.at.like(f"{month}%"))
-        return s.exec(q).all()
+# @router.get("/attendance/{emp_id}", dependencies=hrm_deps)
+# def get_attendance(emp_id: int, month: Optional[str] = Query(None, description="YYYY-MM")):
+#     with Session(engine) as s:
+#         q = select(Attendance).where(Attendance.employee_id == emp_id)
+#         if month:
+#             # store Attendance.at as ISO datetime; filter by startswith month
+#             q = q.where(Attendance.at.like(f"{month}%"))
+#         return s.exec(q).all()
 
 # ---------- Leave Management ----------
 @router.post("/leave-applications", dependencies=hrm_deps)
 def apply_leave(body: LeaveIn):
     with Session(engine) as s:
-        la = LeaveApplication(**body.model_dump())
+        from_date = datetime.strptime(body.from_date, "%d-%m-%Y").date() if "-" in body.from_date else body.from_date
+        to_date = datetime.strptime(body.to_date, "%d-%m-%Y").date() if "-" in body.to_date else body.to_date
+        la = LeaveApplication(
+            employee_id=body.emp_id,
+            from_date=from_date,
+            to_date=to_date,
+            reason=body.reason,
+            status="pending"
+        )
         s.add(la); s.commit(); s.refresh(la)
         return la
 
@@ -156,12 +167,20 @@ def update_leave(leave_id: int, status: str):
 @router.post("/payroll/generate", dependencies=hrm_deps)
 def generate_payroll(body: PayrollIn):
     with Session(engine) as s:
-        p = Payroll(**body.model_dump())
+        net_pay = body.basic + body.allowances - body.deductions
+        p = Payroll(
+            employee_id=body.emp_id,
+            month=body.month,
+            basic=body.basic,
+            allowances=body.allowances,
+            deductions=body.deductions,
+            net_pay=net_pay
+        )
         s.add(p); s.commit(); s.refresh(p)
         return p
 
 @router.get("/payroll/{emp_id}", dependencies=hrm_deps)
 def get_payroll(emp_id: int, month: str = Query(..., description="YYYY-MM")):
     with Session(engine) as s:
-        q = select(Payroll).where(Payroll.emp_id == emp_id, Payroll.month == month)
+        q = select(Payroll).where(Payroll.employee_id == emp_id, Payroll.month == month)
         return s.exec(q).first()
