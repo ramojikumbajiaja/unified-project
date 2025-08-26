@@ -70,4 +70,3 @@ def get_attendance(emp_id: int, month: str | None = None, session: Session = Dep
     if month:
         q = q.where(Attendance.at.like(f"{month}%"))
     return session.exec(q).all()
-    return results

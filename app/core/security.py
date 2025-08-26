@@ -21,22 +21,15 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/iam/auth/login")
 
 
 # Password helpers
-
-
 def hash_password(plain: str) -> str:
     return pwd_ctx.hash(plain)
-
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_ctx.verify(plain, hashed)
 
-
 # JWT helpers
-
-
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
 
 def create_access_token(sub: str, username: str, roles: List[str]) -> str:
     now = _utcnow()
@@ -50,9 +43,6 @@ def create_access_token(sub: str, username: str, roles: List[str]) -> str:
     }
     return jwt.encode(payload, ACCESS_SECRET, algorithm=ALGORITHM)
 
-
-
-
 def create_refresh_token(sub: str, token_id: str) -> str:
     now = _utcnow()
     payload: Dict[str, Any] = {
@@ -64,22 +54,14 @@ def create_refresh_token(sub: str, token_id: str) -> str:
     }
     return jwt.encode(payload, REFRESH_SECRET, algorithm=ALGORITHM)
 
-
-
-
 def decode_access(token: str) -> Dict[str, Any]:
     return jwt.decode(token, ACCESS_SECRET, algorithms=[ALGORITHM])
-
-
-
 
 def decode_refresh(token: str) -> Dict[str, Any]:
     return jwt.decode(token, REFRESH_SECRET, algorithms=[ALGORITHM])
 
 
 # Dependencies
-
-
 def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     try:
         payload = decode_access(token)
@@ -88,6 +70,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
         return payload # contains sub (user id), username, roles
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
 def require_roles(*allowed: str) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     def checker(user_payload: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
         roles = set(user_payload.get("roles", []))
