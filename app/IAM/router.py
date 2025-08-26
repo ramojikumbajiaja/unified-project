@@ -15,6 +15,18 @@ from uuid import uuid4
 router = APIRouter()
 
 # ---------- Auth ----------
+@router.post("/auth/register", response_model=S.UserOut)
+def register(body: S.RegisterIn, session: Session = Depends(get_session)):
+    try:
+        user = create_user(session, body.username, body.email, body.password)
+        assign_role(session, user, "Viewer")
+        if user.id is None:
+            raise HTTPException(500, "User ID is None")
+        return S.UserOut(id=user.id, username=user.username, email=user.email, roles=[r.name for r in user.roles], status=user.status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/auth/login", response_model=S.TokenOut)
 def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     user = authenticate_user(session, form.username, form.password)
@@ -42,18 +54,6 @@ def refresh_token(token: str, session: Session = Depends(get_session)):
     except ValueError as e:
         raise HTTPException(401, str(e))
     return S.TokenOut(access_token=access, refresh_token=new_refresh, expires_in=1800)
-
-
-@router.post("/auth/register", response_model=S.UserOut)
-def register(body: S.RegisterIn, session: Session = Depends(get_session)):
-    try:
-        user = create_user(session, body.username, body.email, body.password)
-        assign_role(session, user, "Viewer")
-        if user.id is None:
-            raise HTTPException(500, "User ID is None")
-        return S.UserOut(id=user.id, username=user.username, email=user.email, roles=[r.name for r in user.roles], status=user.status)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
 
 
 @router.post("/auth/logout")
