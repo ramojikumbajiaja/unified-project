@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
+from typing import Optional
 
 class StockAdd(BaseModel):
     product_id: int
@@ -14,3 +15,4 @@ class StockRemove(BaseModel):
 class StockRead(BaseModel):
     product_id: int
     quantity: int
+    
