@@ -1,61 +1,73 @@
 from fastapi import APIRouter, Depends, HTTPException
+from app.core.security import require_roles
 from sqlmodel import Session, select
 from app.core.database import get_session
-from app.HRM.models import Attendance, AttendanceCreate
-from datetime import datetime,date
+from app.HRM.models import Attendance, Employee
+from app.HRM.schemas import AttendanceIn
+from datetime import datetime, date
 import pytz
+
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
-
-@router.post("/")
-def record_attendance(att: AttendanceCreate, session: Session = Depends(get_session)):
-    today = date.today()
-    stmt = select(Attendance).where(Attendance.employee_id == att.employee_id, Attendance.date == today)
-    attendance = session.exec(stmt).first()
-        
-    def get_ist_time():
-        ist = pytz.timezone("Asia/Kolkata")
-        return datetime.now(ist)
-    now = get_ist_time()  # Changed from datetime.utcnow()
- 
-    if att.action not in ['check_in', 'check_out']:
-        raise HTTPException(status_code=400, detail="Invalid action")
- 
-    if not attendance:
-        if att.action == 'check_in':
-            attendance = Attendance(employee_id=att.employee_id, date=today, check_in=now)
-            session.add(attendance)
-        else:
-            raise HTTPException(status_code=400, detail="Cannot check out without checking in first")
-    else:
-        if att.action == 'check_in':
-            raise HTTPException(status_code=400, detail="Already checked in today")
-        elif att.action == 'check_out':
-            if attendance.check_out:
-                raise HTTPException(status_code=400, detail="Already checked out today")
-            attendance.check_out = now
-            session.add(attendance)
- 
+@router.post("/{emp_id}", dependencies=[Depends(require_roles("Admin", "HR"))])
+def check_attendance(emp_id: int, body: AttendanceIn, session: Session = Depends(get_session)):
+    employee = session.get(Employee, emp_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    att = Attendance(employee_id=emp_id, action=body.action)
+    session.add(att)
     session.commit()
-    session.refresh(attendance)
-    return attendance
- 
-@router.get("/{emp_id}", response_model=list[Attendance])
-def list_attendance(emp_id: int, month: str | None = None, session: Session = Depends(get_session)):
+    session.refresh(att)
+    return att
+
+@router.get("/{emp_id}")
+def get_attendance(emp_id: int, month: str | None = None, session: Session = Depends(get_session)):
     q = select(Attendance).where(Attendance.employee_id == emp_id)
     if month:
-        try:
-            year_str, mon_str = month.split("-")
-            year = int(year_str); mon = int(mon_str)
-        except Exception:
-            raise HTTPException(status_code=400, detail="month must be YYYY-MM")
-        from datetime import datetime, timezone, timedelta
-        start = datetime(year, mon, 1, tzinfo=timezone.utc)
-        if mon == 12:
-            end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-        else:
-            end = datetime(year, mon + 1, 1, tzinfo=timezone.utc)
-        q = q.where(Attendance.check_in >= start, Attendance.check_in < end)
+        q = q.where(Attendance.at.like(f"{month}%"))
+    return session.exec(q).all()
 
-    results = session.exec(q).all()
+@router.put("/{emp_id}", dependencies=[Depends(require_roles("Admin", "HR"))])
+def update_attendance(emp_id: int, body: AttendanceIn, session: Session = Depends(get_session)):
+    employee = session.get(Employee, emp_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    att = session.get(Attendance, emp_id)
+    if not att:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    att.action = body.action
+    session.commit()
+    session.refresh(att)
+    return att
+
+@router.delete("/{emp_id}", dependencies=[Depends(require_roles("Admin", "HR"))])
+def delete_attendance(emp_id: int, session: Session = Depends(get_session)):
+    employee = session.get(Employee, emp_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    att = session.get(Attendance, emp_id)
+    if not att:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    session.delete(att)
+    session.commit()
+    return {"detail": "Attendance record deleted"}
+
+
+@router.post("/{emp_id}", dependencies=[Depends(require_roles("Admin", "HR"))])
+def check_attendance(emp_id: int, body: AttendanceIn, session: Session = Depends(get_session)):
+    employee = session.get(Employee, emp_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    att = Attendance(employee_id=emp_id, action=body.action)
+    session.add(att)
+    session.commit()
+    session.refresh(att)
+    return att
+ 
+@router.get("/{emp_id}")
+def get_attendance(emp_id: int, month: str | None = None, session: Session = Depends(get_session)):
+    q = select(Attendance).where(Attendance.employee_id == emp_id)
+    if month:
+        q = q.where(Attendance.at.like(f"{month}%"))
+    return session.exec(q).all()
     return results

@@ -1,46 +1,48 @@
 from fastapi import APIRouter, Depends, HTTPException
+from app.core.security import require_roles
 from sqlmodel import Session, select
 from app.core.database import get_session
-from app.HRM.models import Employee, EmployeeBase
+from app.HRM.models import Employee
+from app.HRM.schemas import EmployeeIn
 
-router = APIRouter()
+router = APIRouter(prefix="/employees", tags=["employees"])
 
-@router.post("/employees", response_model=Employee)
-def create_employee(employee: EmployeeBase, session: Session = Depends(get_session)):
-    new_employee = Employee.from_orm(employee)
-    session.add(new_employee)
+@router.post("/employees", dependencies=[Depends(require_roles("Admin", "HR"))])
+def create_employee(body: EmployeeIn, session: Session = Depends(get_session)):
+    emp = Employee(**body.model_dump())
+    session.add(emp)
     session.commit()
-    session.refresh(new_employee)
-    return new_employee
+    session.refresh(emp)
+    return emp
 
-@router.get("/employees", response_model=list[Employee])
+@router.get("/employees")
 def list_employees(session: Session = Depends(get_session)):
     return session.exec(select(Employee)).all()
 
-@router.get("/employees/{emp_id}", response_model=Employee)
+@router.get("/employees/{emp_id}")
 def get_employee(emp_id: int, session: Session = Depends(get_session)):
-    employee = session.get(Employee, emp_id)
-    if not employee:
+    emp = session.get(Employee, emp_id)
+    if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
-    return employee
+    return emp
 
-@router.put("/employees/{emp_id}", response_model=Employee)
-def update_employee(emp_id: int, updated_data: EmployeeBase, session: Session = Depends(get_session)):
-    employee = session.get(Employee, emp_id)
-    if not employee:
+@router.put("/employees/{emp_id}", dependencies=[Depends(require_roles("Admin", "HR"))])
+def update_employee(emp_id: int, body: EmployeeIn, session: Session = Depends(get_session)):
+    emp = session.get(Employee, emp_id)
+    if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
-    for key, value in updated_data.dict().items():
-        setattr(employee, key, value)
-    session.add(employee)
+    for k, v in body.model_dump().items():
+        setattr(emp, k, v)
+    session.add(emp)
     session.commit()
-    session.refresh(employee)
-    return employee
+    session.refresh(emp)
+    return emp
 
-@router.delete("/employees/{emp_id}")
+@router.delete("/employees/{emp_id}", dependencies=[Depends(require_roles("Admin", "HR"))])
 def delete_employee(emp_id: int, session: Session = Depends(get_session)):
-    employee = session.get(Employee, emp_id)
-    if not employee:
+    emp = session.get(Employee, emp_id)
+    if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
-    session.delete(employee)
+    session.delete(emp)
     session.commit()
-    return {"message": "Employee deleted successfully"}
+    return {"message": "Employee deleted"}
