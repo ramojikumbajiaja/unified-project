@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
-from database import get_session
-from models import Attendance, AttendanceCreate
+from app.core.database import get_session
+from app.HRM.models import Attendance, AttendanceCreate
 from datetime import datetime,date
 import pytz
 router = APIRouter(prefix="/attendance", tags=["attendance"])

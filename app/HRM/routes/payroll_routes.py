@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select
 from decimal import Decimal, ROUND_HALF_UP
-from database import get_session
-from models import Payroll, PayrollGenerate, Employee
+from app.core.database import get_session
+from app.HRM.models import Payroll, PayrollGenerate, Employee
 
 router = APIRouter(prefix="/payroll", tags=["payroll"])
 

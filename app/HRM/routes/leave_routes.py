@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select
-from database import get_session
-from models import LeaveApplication, LeaveCreate, LeaveUpdate, Employee
+from app.core.database import get_session
+from app.HRM.models import LeaveApplication, LeaveCreate, LeaveUpdate, Employee
 
 router = APIRouter(prefix="/leave-applications", tags=["leaves"])
 
