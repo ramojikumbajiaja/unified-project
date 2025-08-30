@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field as PydField
@@ -71,3 +72,11 @@ class ApplicationUpdate(BaseModel):
     name: Optional[str] = None
     redirect_uris: Optional[List[str]] = None
     status: Optional[str] = None
+
+class UserRoleLinkCreate(BaseModel):
+    user_id: int
+    role_id: int
+
+class UserRoleLinkOut(BaseModel):
+    user_id: int
+    role_id: int

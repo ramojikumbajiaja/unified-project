@@ -7,7 +7,7 @@ from app.HRM.schemas import EmployeeIn
 from datetime import datetime,date
 router = APIRouter(prefix="/employees", tags=["employees"])
 
-@router.post("/employees", dependencies=[Depends(require_roles("Admin", "HR"))])
+@router.post("/employees", dependencies=[Depends(require_roles("Admin", "HR_Admin"))])
 def create_employee(body: EmployeeIn, session: Session = Depends(get_session)):
     # Support both DD-MM-YYYY and YYYY-MM-DD formats
     if body.date_of_joining:

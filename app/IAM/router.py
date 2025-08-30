@@ -28,6 +28,26 @@ def create_role(body: S.RoleCreate, session: Session = Depends(get_session)):
     session.commit(); session.refresh(new_role)
     return S.RoleOut(id=new_role.id, name=new_role.name, description=new_role.description)
 
+# ---------- UserRoleLink API ----------
+from app.IAM.models import User, Role
+
+# Get user roles by username
+@router.get("/user/{username}/roles")
+def get_user_roles(username: str, session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.username == username)).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    return {"username": user.username, "roles": [r.name for r in user.roles]}
+from app.IAM.models import UserRoleLink
+@router.post("/userrolelink", response_model=S.UserRoleLinkOut)
+def create_user_role_link(body: S.UserRoleLinkCreate, session: Session = Depends(get_session)):
+    link = session.exec(select(UserRoleLink).where((UserRoleLink.user_id == body.user_id) & (UserRoleLink.role_id == body.role_id))).first()
+    if link:
+        raise HTTPException(400, "UserRoleLink already exists")
+    new_link = UserRoleLink(user_id=body.user_id, role_id=body.role_id)
+    session.add(new_link)
+    session.commit(); session.refresh(new_link)
+    return S.UserRoleLinkOut(user_id=new_link.user_id, role_id=new_link.role_id)
 
 # ---------- Auth ----------
 @router.post("/auth/register", response_model=S.UserOut)
@@ -133,7 +153,7 @@ def register_application(body: S.ApplicationCreate, session: Session = Depends(g
         grant_types=_json.loads(rec.grant_types), status=rec.status
     )
 
-@router.get("/applications", dependencies=[Depends(require_roles("Admin"))])
+@router.get("/applications", dependencies=[Depends(require_roles("Admin",'HR_Admin'))])
 def list_applications(session: Session = Depends(get_session)):
     rows = session.exec(select(Application)).all()
     out = []
@@ -177,4 +197,5 @@ def delete_application(app_id: int, session: Session = Depends(get_session)):
         raise HTTPException(404, "Application not found")
     session.delete(r); session.commit()
     return {"message": "Application deleted successfully"}
+
 
