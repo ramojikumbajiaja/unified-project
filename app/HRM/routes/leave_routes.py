@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from app.core.security import require_roles
+from app.core.security import require_roles, require_login
 from sqlmodel import Session, select
 from app.core.database import get_session
 from app.HRM.models import LeaveApplication, Employee
@@ -27,7 +27,7 @@ def apply_leave(body: LeaveIn, session: Session = Depends(get_session)):
     session.refresh(la)
     return la
 
-@router.get("", response_model=list[LeaveApplication])
+@router.get("", response_model=list[LeaveApplication], dependencies=[Depends(require_login)])
 def list_leave_applications(status: str | None = None, session: Session = Depends(get_session)):
     q = select(LeaveApplication)
     if status:

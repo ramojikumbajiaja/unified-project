@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from app.core.security import require_roles
+from app.core.security import require_roles, require_login
 from sqlmodel import Session, select
 from decimal import Decimal, ROUND_HALF_UP
 from app.core.database import get_session
@@ -29,7 +29,7 @@ def generate_payroll(body: PayrollIn, session: Session = Depends(get_session)):
     session.refresh(p)
     return p
 
-@router.get("/{emp_id}")
+@router.get("/{emp_id}", dependencies=[Depends(require_login)])
 def get_payroll(emp_id: int, month: str = Query(..., description="YYYY-MM"), session: Session = Depends(get_session)):
     q = select(Payroll).where(Payroll.employee_id == emp_id, Payroll.month == month)
     return session.exec(q).first()

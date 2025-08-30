@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Callable
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends,status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -78,3 +78,14 @@ def require_roles(*allowed: str) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
             raise HTTPException(status_code=403, detail="Insufficient role")
         return user_payload
     return checker
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def require_login(token: str = Depends(oauth2_scheme)):
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return token

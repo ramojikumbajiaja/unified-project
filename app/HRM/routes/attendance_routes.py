@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import require_roles
+from app.core.security import require_roles, require_login
 from sqlmodel import Session, select
 from app.core.database import get_session
 from app.HRM.models import Attendance, Employee
@@ -20,7 +20,7 @@ def check_attendance(emp_id: int, body: AttendanceIn, session: Session = Depends
     session.refresh(att)
     return att
 
-@router.get("/{emp_id}")
+@router.get("/{emp_id}", dependencies=[Depends(require_login)])
 def get_attendance(emp_id: int, month: str | None = None, session: Session = Depends(get_session)):
     q = select(Attendance).where(Attendance.employee_id == emp_id)
     if month:

@@ -1,5 +1,6 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 from app.core.database import get_session
@@ -12,7 +13,21 @@ from app.core.security import decode_refresh
 import json as _json
 from uuid import uuid4
 
+
 router = APIRouter()
+
+# ---------- Roles ----------
+from app.IAM.models import Role
+@router.post("/roles", response_model=S.RoleOut)
+def create_role(body: S.RoleCreate, session: Session = Depends(get_session)):
+    role = session.exec(select(Role).where(Role.name == body.name)).first()
+    if role:
+        raise HTTPException(400, "Role already exists")
+    new_role = Role(name=body.name, description=body.description)
+    session.add(new_role)
+    session.commit(); session.refresh(new_role)
+    return S.RoleOut(id=new_role.id, name=new_role.name, description=new_role.description)
+
 
 # ---------- Auth ----------
 @router.post("/auth/register", response_model=S.UserOut)
@@ -162,3 +177,4 @@ def delete_application(app_id: int, session: Session = Depends(get_session)):
         raise HTTPException(404, "Application not found")
     session.delete(r); session.commit()
     return {"message": "Application deleted successfully"}
+

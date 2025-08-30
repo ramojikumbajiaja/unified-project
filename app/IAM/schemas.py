@@ -37,6 +37,11 @@ class UserUpdateIn(BaseModel):
 class RoleCreate(BaseModel):
     name: str
     description: Optional[str] = None
+
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
 class PermissionCreate(BaseModel):
     name: str
     description: Optional[str] = None

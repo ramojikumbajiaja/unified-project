@@ -4,7 +4,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from main import app
 from database import get_session
 
-TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/HRM_DB"
+TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/iam_db"
 engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 
 def override_get_session():

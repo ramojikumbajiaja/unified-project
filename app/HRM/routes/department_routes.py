@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import require_roles
+from app.core.security import require_roles, require_login
 from sqlmodel import Session, select
 from app.core.database import get_session
 from app.HRM.models import Department
@@ -13,7 +13,7 @@ def create_department(d: Department, session: Session = Depends(get_session)):
     session.refresh(d)
     return d
 
-@router.get("/departments")
+@router.get("/departments", dependencies=[Depends(require_login)])
 def list_departments(session: Session = Depends(get_session)):
     return session.exec(select(Department)).all()
 
